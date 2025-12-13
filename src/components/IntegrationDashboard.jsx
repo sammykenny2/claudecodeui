@@ -13,7 +13,11 @@ import {
   Radio,
   Newspaper,
   Bot,
-  Settings
+  Settings,
+  Building2,
+  Users,
+  FileCode,
+  DollarSign
 } from 'lucide-react';
 
 /**
@@ -27,6 +31,18 @@ import {
  */
 
 const SERVICES = [
+  {
+    id: 'digital-company',
+    name: 'Digital Company',
+    description: 'AI-powered virtual company with multi-agent architecture',
+    icon: Building2,
+    color: '#F59E0B',
+    endpoints: {
+      health: 'http://localhost:3001/api/admin/overview',
+      cost: 'http://localhost:3001/api/admin/cost/summary',
+      sop: 'http://localhost:3001/api/sop/executions',
+    }
+  },
   {
     id: 'news-podcaster',
     name: 'News Podcaster',
@@ -77,6 +93,8 @@ export default function IntegrationDashboard() {
   const [gatewayStats, setGatewayStats] = useState(null);
   const [gatewayProviders, setGatewayProviders] = useState([]);
   const [podcastRuns, setPodcastRuns] = useState([]);
+  const [digitalCompanyStats, setDigitalCompanyStats] = useState(null);
+  const [digitalCompanySOP, setDigitalCompanySOP] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
 
@@ -140,6 +158,26 @@ export default function IntegrationDashboard() {
     }
   }, []);
 
+  const fetchDigitalCompanyDetails = useCallback(async () => {
+    try {
+      // Fetch cost summary
+      const costResp = await fetch('http://localhost:3001/api/admin/cost/summary');
+      if (costResp.ok) {
+        const data = await costResp.json();
+        setDigitalCompanyStats(data);
+      }
+
+      // Fetch SOP executions
+      const sopResp = await fetch('http://localhost:3001/api/sop/executions?limit=5');
+      if (sopResp.ok) {
+        const data = await sopResp.json();
+        setDigitalCompanySOP(data.executions || data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch digital company details:', err);
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
     setIsRefreshing(true);
 
@@ -156,10 +194,13 @@ export default function IntegrationDashboard() {
     if (statuses['news-podcaster']?.status === 'online') {
       await fetchPodcastRuns();
     }
+    if (statuses['digital-company']?.status === 'online') {
+      await fetchDigitalCompanyDetails();
+    }
 
     setLastUpdated(new Date());
     setIsRefreshing(false);
-  }, [checkServiceHealth, fetchGatewayDetails, fetchPodcastRuns]);
+  }, [checkServiceHealth, fetchGatewayDetails, fetchPodcastRuns, fetchDigitalCompanyDetails]);
 
   // Initial load and auto-refresh
   useEffect(() => {
@@ -335,6 +376,37 @@ export default function IntegrationDashboard() {
                   </div>
                 </div>
               )}
+
+              {service.id === 'digital-company' && status?.status === 'online' && status?.data && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-400">Agents:</span>
+                      <span className="ml-2">{status.data.agents?.total || 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Tasks:</span>
+                      <span className="ml-2">{status.data.tasks?.active || 0} active</span>
+                    </div>
+                    {digitalCompanyStats && (
+                      <>
+                        <div>
+                          <span className="text-gray-400">Provider:</span>
+                          <span className="ml-2 text-green-400">
+                            {digitalCompanyStats.provider === 'subscription' ? 'Subscription (Free)' : digitalCompanyStats.provider || 'N/A'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Cost:</span>
+                          <span className="ml-2 text-green-400">
+                            ${(digitalCompanyStats.total_cost || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -373,6 +445,53 @@ export default function IntegrationDashboard() {
                       Error: {provider.last_error}
                     </div>
                   )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Digital Company SOP Executions */}
+      {digitalCompanySOP.length > 0 && (
+        <div className="bg-gray-800 rounded-xl p-5 border border-gray-700 mb-6">
+          <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-amber-400" />
+            Digital Company SOP Executions
+          </h3>
+          <div className="space-y-3">
+            {digitalCompanySOP.slice(0, 5).map((exec, idx) => (
+              <div
+                key={exec.id || idx}
+                className="flex items-center justify-between p-3 bg-gray-900 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full ${
+                    exec.status === 'completed' ? 'bg-green-400' :
+                    exec.status === 'failed' ? 'bg-red-400' :
+                    exec.status === 'running' ? 'bg-blue-400 animate-pulse' :
+                    'bg-yellow-400'
+                  }`} />
+                  <div>
+                    <span className="text-sm font-medium">{exec.template || 'SOP Task'}</span>
+                    <span className="text-xs text-gray-400 ml-2">
+                      {exec.created_at ? new Date(exec.created_at).toLocaleString() : ''}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-gray-400 flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    {exec.agent || 'GM'}
+                  </span>
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    exec.status === 'completed' ? 'bg-green-900/50 text-green-400' :
+                    exec.status === 'failed' ? 'bg-red-900/50 text-red-400' :
+                    exec.status === 'running' ? 'bg-blue-900/50 text-blue-400' :
+                    'bg-yellow-900/50 text-yellow-400'
+                  }`}>
+                    {exec.status || 'pending'}
+                  </span>
                 </div>
               </div>
             ))}
@@ -425,7 +544,23 @@ export default function IntegrationDashboard() {
       )}
 
       {/* Quick Actions */}
-      <div className="mt-6 flex gap-4">
+      <div className="mt-6 flex flex-wrap gap-4">
+        <a
+          href="http://localhost:3000"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm font-medium transition-colors"
+        >
+          Digital Company UI
+        </a>
+        <a
+          href="http://localhost:3002"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm font-medium transition-colors"
+        >
+          Digital Company Admin
+        </a>
         <a
           href="http://localhost:8000/docs"
           target="_blank"
